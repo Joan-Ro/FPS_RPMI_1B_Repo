@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -21,7 +22,7 @@ public class GunSistem : MonoBehaviour
     [Header("Bullet Managment")]
     [SerializeField] int ammoSize = 30; //Cantidad máxima de balas en el cargador
     [SerializeField] int bulletsPerTap = 1; //Cantidad de balas que se disparan por cada vez que se aprieta el botón de disparo
-    int bulletsLeft; //Cantidad de balas restantes en el cargador
+    [SerializeField] int bulletsLeft; //Cantidad de balas restantes en el cargador
 
     [Header("Feedback References")]
     [SerializeField] GameObject impactEffect; //Ref al VFX de impacto de Bala
@@ -42,7 +43,28 @@ public class GunSistem : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        
+        if (canShoot && shooting && !reloading && bulletsLeft > 0)
+        {
+            //Inicializar el proceso de disparo
+            StartCoroutine(ShootRoutine());
+        }
+    }
+
+    IEnumerator ShootRoutine()
+    {
+        canShoot = false; //Primera capa de seeguridad que evita que apilemos disparos
+        if (!allowButtonHold) shooting = false; // Configuración del disparo por tap
+        for (int i = 0; i < bulletsPerTap; i++) 
+        {
+            if (bulletsLeft <= 0) break; //Segunda prevención de errores
+
+            Shoot(); //Disparo en si = Raycast que permite daño
+            bulletsLeft--; //Quita una bala del cargador actual
+        }
+
+        yield return new WaitForSeconds(shootingCooldown); //Ejecución del cooldown entre disparos
+        canShoot = true; //Permite disparar de nuevo al finalizar el cooldown
+
     }
 
     void Shoot()
@@ -63,19 +85,51 @@ public class GunSistem : MonoBehaviour
         {
             //PODEMOS CODEAR TODOS LOS EFECTOD QUE QUIERO PARA LA INTRACCIÓN
             Debug.Log(hit.collider.name);
+            if (hit.collider.CompareTag("Enemy"))
+            {
+                EnemyHealth enemyHealth = hit.collider.GetComponent<EnemyHealth>();
+                enemyHealth.TakeDamage(damage);
+            }
         }
     }
 
-    #region
+    IEnumerator ReloadRoutine()
+    {
+        reloading = true; //Se activa modo recarga = no se puede stackear la recarga
+        yield return new WaitForSeconds(reloadTime);
+        bulletsLeft = ammoSize; // Se efectua la recarga a nivel datos
+        reloading = false;
+
+    }
+
+    void Reload()
+    {
+        if (bulletsLeft < ammoSize && !reloading)
+        {
+            StartCoroutine(ReloadRoutine());
+        }
+    }
+
+    #region Input Methods
 
     public void OnShot(InputAction.CallbackContext context)
     {
-        Shoot();
+        //El sistema de input debe comprobar si el disparo es por tap o por mantener
+        if (allowButtonHold)
+        {
+            //Modo antener ON
+            shooting = context.ReadValueAsButton();
+        }
+        else
+        {
+            //Modo tap ON
+            if (context.performed) shooting = true;
+        }
     }
 
     public void OnReload(InputAction.CallbackContext context)
     {
-
+        if (context.performed) Reload();    
     }
 
     #endregion
